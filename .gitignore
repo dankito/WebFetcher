@@ -1,0 +1,15 @@
+
+node_modules
+data
+dist
+public/**
+
+.env
+*.local
+
+
+.vscode
+.idea
+.junie
+
+.DS_Store
