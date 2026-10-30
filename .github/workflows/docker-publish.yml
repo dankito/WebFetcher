@@ -1,0 +1,82 @@
+name: Publish Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 1.2.3 or v1.2.3)'
+        required: true
+        type: string
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          RAW_VERSION="${{ inputs.version }}"
+          if [ -z "$RAW_VERSION" ]; then
+            RAW_VERSION="${GITHUB_REF_NAME}"
+          fi
+          
+          # Remove leading 'v' if present
+          VERSION="${RAW_VERSION#v}"
+          
+          # Validate semver format <major>.<minor>.<patch>
+          if [[ ! "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Error: Version '$RAW_VERSION' does not match semantic version format <major>.<minor>.<patch>"
+            exit 1
+          fi
+          
+          MAJOR="${BASH_REMATCH[1]}"
+          MINOR="${BASH_REMATCH[2]}"
+          PATCH="${BASH_REMATCH[3]}"
+          
+          IMAGE_NAME="${{ github.repository_owner }}/web-fetcher"
+          
+          TAG_FULL="${IMAGE_NAME}:${MAJOR}.${MINOR}.${PATCH}"
+          TAG_MINOR="${IMAGE_NAME}:${MAJOR}.${MINOR}"
+          TAG_MAJOR="${IMAGE_NAME}:${MAJOR}"
+          
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag_full=${TAG_FULL}" >> "$GITHUB_OUTPUT"
+          echo "tag_minor=${TAG_MINOR}" >> "$GITHUB_OUTPUT"
+          echo "tag_major=${TAG_MAJOR}" >> "$GITHUB_OUTPUT"
+          
+          echo "Building version: ${VERSION}"
+          echo "Tags to publish:"
+          echo "  - ${TAG_FULL}"
+          echo "  - ${TAG_MINOR}"
+          echo "  - ${TAG_MAJOR}"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+          tags: |
+            ${{ steps.version.outputs.tag_full }}
+            ${{ steps.version.outputs.tag_minor }}
+            ${{ steps.version.outputs.tag_major }}

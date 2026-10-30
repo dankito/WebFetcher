@@ -21,6 +21,9 @@ WORKDIR /app
 
 # Version ARG from GitHub Action / build workflow
 ARG VERSION=1.0.0
+LABEL org.opencontainers.image.version=$VERSION
+LABEL org.opencontainers.image.base.name=docker.io/oven/bun:1-slim
+
 
 # 1. System packages (changes very rarely)
 RUN apt-get update && apt-get install -y --no-install-recommends \
