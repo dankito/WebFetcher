@@ -60,6 +60,10 @@ export class FetchRequest {
     return this.timeout * 1000
   }
 
+  timeoutMsOrDefault(defaultTimeoutMs: number): number {
+    return this.timeoutMs ?? defaultTimeoutMs
+  }
+
   /** True if only engines that execute JavaScript are applicable. */
   get requiresJavaScript(): boolean {
     return this.executeJavaScript === true || this.loadLazyContent === true

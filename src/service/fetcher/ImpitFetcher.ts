@@ -67,7 +67,7 @@ export class ImpitFetcher implements Fetcher {
       const response = await client.fetch(request.url, {
         method: "GET",
         headers: request.headersWithCookie,
-        timeout: request.timeoutMs ?? ImpitFetcher.DEFAULT_TIMEOUT_MS,
+        timeout: request.timeoutMsOrDefault(ImpitFetcher.DEFAULT_TIMEOUT_MS),
         redirect: request.followRedirects ? "follow" : "manual",
       })
 

@@ -5,6 +5,8 @@ export enum EngineFailureKind {
   Network = "Network",
   HttpStatus = "HttpStatus",
   JsWall = "JsWall",
+  BrowserLaunch = "BrowserLaunch",
+  BrowserClosed = "BrowserClosed",
   Other = "Other",
 }
 

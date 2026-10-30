@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
 import type { BrowserContext } from "playwright-core"
+import { BrowserDisplayMode } from "../../model/BrowserDisplayMode"
 
 export class CamoufoxLease {
   constructor(
@@ -16,6 +17,36 @@ class BrowserSlot {
   unloadTimer?: ReturnType<typeof setTimeout>
 }
 
+class Semaphore {
+  private available: number
+  private readonly waiters: (() => void)[] = []
+
+  constructor(permits: number) {
+    this.available = permits
+  }
+
+  async acquire(): Promise<void> {
+    if (this.available > 0) {
+      this.available--
+
+      return
+    }
+
+    await new Promise<void>(resolve => this.waiters.push(resolve))
+  }
+
+  release(): void {
+    const next = this.waiters.shift()
+
+    if (next) {
+      // the permit is handed over directly
+      next()
+    } else {
+      this.available++
+    }
+  }
+}
+
 /**
  * Implementation detail of the CamoufoxFetcher.
  *
@@ -24,9 +55,11 @@ class BrowserSlot {
  * There are two persistent browser profiles, because JavaScript can only be switched off per browser (Firefox pref),
  * not per page: one with JavaScript and one without. Each is launched / unloaded independently.
  * Cookies live in the profile and are therefore shared between requests (e.g. a Cloudflare clearance cookie gets reused).
+ * At most `maxConcurrentPages` leases are active at the same time, further callers wait.
  */
 export class CamoufoxBrowserManager {
   private readonly slots = { js: new BrowserSlot(), noJs: new BrowserSlot() }
+  private readonly pagePermits: Semaphore
 
   /** Resolves to an Error if the installation failed. Never rejects. */
   private installation: Promise<Error | undefined>
@@ -34,20 +67,28 @@ export class CamoufoxBrowserManager {
   constructor(
     private readonly dataDir: string,
     private readonly idleTimeoutSeconds: number,
+    private readonly displayMode: BrowserDisplayMode,
+    maxConcurrentPages = 10,
   ) {
+    this.pagePermits = new Semaphore(maxConcurrentPages)
     this.installation = this.install()
   }
 
   /** Returns an Error instead of throwing if Camoufox is not installed or can't be launched. */
   async acquire(javaScriptEnabled: boolean): Promise<CamoufoxLease | Error> {
-    const installError = await this.installation
+    const installation = this.installation
+    const installError = await installation
 
     if (installError) {
-      // retry the installation with the next request
-      this.installation = this.install()
+      // retry the installation with the next request, but only once per failure (parallel callers share the same one)
+      if (this.installation === installation) {
+        this.installation = this.install()
+      }
 
       return installError
     }
+
+    await this.pagePermits.acquire()
 
     const slot = javaScriptEnabled ? this.slots.js : this.slots.noJs
 
@@ -65,6 +106,7 @@ export class CamoufoxBrowserManager {
         }
 
         released = true
+        this.pagePermits.release()
         slot.activeLeases--
 
         if (slot.activeLeases === 0) {
@@ -72,6 +114,7 @@ export class CamoufoxBrowserManager {
         }
       })
     } catch (error) {
+      this.pagePermits.release()
       slot.activeLeases--
       this.scheduleUnload(slot)
 
@@ -132,13 +175,26 @@ export class CamoufoxBrowserManager {
     // imported lazily so that the app starts fast
     const { Camoufox } = await import("camoufox-js")
 
-    console.log(`Launching Camoufox (javaScript=${javaScriptEnabled}, profile=${userDataDir})`)
+    console.log(`Launching Camoufox (javaScript=${javaScriptEnabled}, display=${this.displayMode}, profile=${userDataDir})`)
 
     return Camoufox({
-      headless: true,
+      headless: this.headlessOption(),
+      humanize: true,
+      block_webrtc: true,
       user_data_dir: userDataDir,
       ...(javaScriptEnabled ? {} : { firefox_user_prefs: { "javascript.enabled": false } }),
     })
+  }
+
+  private headlessOption(): boolean | "virtual" {
+    switch (this.displayMode) {
+      case BrowserDisplayMode.Headed:
+        return false
+      case BrowserDisplayMode.Virtual:
+        return "virtual"
+      default:
+        return true
+    }
   }
 
   private cancelUnload(slot: BrowserSlot): void {
