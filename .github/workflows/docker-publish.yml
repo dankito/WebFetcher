@@ -3,58 +3,75 @@ name: Publish Docker Image
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (e.g. 1.2.3 or v1.2.3)'
+        description: "Version (e.g. 1.2.3 or v1.2.3). Must be an existing tag."
         required: true
         type: string
+      latest:
+        description: "Also tag as latest"
+        type: boolean
+        default: false
+
+concurrency:
+  group: docker-publish-${{ github.event.inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/web-fetcher
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
 
-      - name: Determine version
+    steps:
+      - name: Determine and validate version
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          RAW_VERSION="${{ inputs.version }}"
-          if [ -z "$RAW_VERSION" ]; then
-            RAW_VERSION="${GITHUB_REF_NAME}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            RAW_VERSION="$INPUT_VERSION"
+          else
+            RAW_VERSION="$REF_NAME"
           fi
-          
-          # Remove leading 'v' if present
+
           VERSION="${RAW_VERSION#v}"
-          
-          # Validate semver format <major>.<minor>.<patch>
-          if [[ ! "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            echo "Error: Version '$RAW_VERSION' does not match semantic version format <major>.<minor>.<patch>"
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version '$RAW_VERSION' is not a valid <major>.<minor>.<patch>"
             exit 1
           fi
-          
-          MAJOR="${BASH_REMATCH[1]}"
-          MINOR="${BASH_REMATCH[2]}"
-          PATCH="${BASH_REMATCH[3]}"
-          
-          IMAGE_NAME="${{ github.repository_owner }}/web-fetcher"
-          
-          TAG_FULL="${IMAGE_NAME}:${MAJOR}.${MINOR}.${PATCH}"
-          TAG_MINOR="${IMAGE_NAME}:${MAJOR}.${MINOR}"
-          TAG_MAJOR="${IMAGE_NAME}:${MAJOR}"
-          
+
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag_full=${TAG_FULL}" >> "$GITHUB_OUTPUT"
-          echo "tag_minor=${TAG_MINOR}" >> "$GITHUB_OUTPUT"
-          echo "tag_major=${TAG_MAJOR}" >> "$GITHUB_OUTPUT"
-          
-          echo "Building version: ${VERSION}"
-          echo "Tags to publish:"
-          echo "  - ${TAG_FULL}"
-          echo "  - ${TAG_MINOR}"
-          echo "  - ${TAG_MAJOR}"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tag
+        uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ steps.version.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Verify tag is on main
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git fetch origin main --depth=0 || git fetch origin main
+          if ! git merge-base --is-ancestor "$TAG" origin/main; then
+            echo "::error::Tag $TAG is not reachable from main"
+            exit 1
+          fi
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -62,21 +79,43 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.tag }}
+            type=semver,pattern={{major}},value=${{ steps.version.outputs.tag }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' || inputs.latest }}
+
+      - name: Build and push
+        id: push
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
           push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
-          tags: |
-            ${{ steps.version.outputs.tag_full }}
-            ${{ steps.version.outputs.tag_minor }}
-            ${{ steps.version.outputs.tag_major }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
