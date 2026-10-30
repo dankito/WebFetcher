@@ -4,7 +4,7 @@ import type { FetchEngine } from "./FetchEngine"
  * Parsed and validated request parameters, shared by GET and POST and by the MCP tools.
  * Never instantiated, therefore an interface.
  */
-export interface FetchRequestParams {
+export interface FetchRequest {
   /** The only required parameter (http / https). */
   url: string
 

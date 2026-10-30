@@ -1,7 +1,7 @@
 import { Impit, TimeoutError, type Browser } from "impit"
 import { FetchEngine } from "../../model/FetchEngine"
 import { FetchError, FetchErrorKind } from "../../model/FetchError"
-import type { FetchRequestParams } from "../../model/FetchRequestParams"
+import type { FetchRequest } from "../../model/FetchRequest"
 import { FetchResponse } from "../../model/FetchResponse"
 import { CharsetDecoderService } from "../CharsetDecoderService"
 import { SetCookieParser } from "../SetCookieParser"
@@ -43,7 +43,7 @@ export class ImpitFetchStrategy implements FetchStrategy {
     private cookieParser: SetCookieParser = new SetCookieParser(),
   ) {}
 
-  async fetch(params: FetchRequestParams): Promise<FetchResponse> {
+  async fetch(params: FetchRequest): Promise<FetchResponse> {
     const start = performance.now()
     const client = this.getClient(this.resolveBrowser(params.fingerprint))
     const timeoutMs = params.timeout !== undefined && params.timeout >= 1 ? params.timeout * 1000 : null
@@ -115,7 +115,7 @@ export class ImpitFetchStrategy implements FetchStrategy {
     return lowerVersions[0]?.browser ?? family
   }
 
-  private buildHeaders(params: FetchRequestParams): Record<string, string> {
+  private buildHeaders(params: FetchRequest): Record<string, string> {
     const headers: Record<string, string> = { ...params.headers }
 
     if (params.cookies && Object.keys(params.cookies).length > 0) {

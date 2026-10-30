@@ -10,7 +10,7 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import { FetchEngine } from "../src/model/FetchEngine"
 import { FetchFailedError } from "../src/model/FetchError"
-import type { FetchRequestParams } from "../src/model/FetchRequestParams"
+import type { FetchRequest } from "../src/model/FetchRequest"
 import { CamoufoxBrowserManager } from "../src/service/engine/CamoufoxBrowserManager"
 import { CamoufoxFetchStrategy } from "../src/service/engine/CamoufoxFetchStrategy"
 import { ImpitFetchStrategy } from "../src/service/engine/ImpitFetchStrategy"
@@ -58,7 +58,7 @@ afterAll(async () => {
 describe.each(Object.values(FetchEngine))("%s", (engine) => {
   test.each(sites)("$name", async (site) => {
     const service = new FetchService([strategies[engine]])
-    const params: FetchRequestParams = {
+    const params: FetchRequest = {
       url: site.url,
       followRedirects: true,
       strategies: [engine],

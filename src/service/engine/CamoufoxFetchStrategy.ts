@@ -1,7 +1,7 @@
 import type { Page, Response as PlaywrightResponse } from "playwright-core"
 import { FetchEngine } from "../../model/FetchEngine"
 import { FetchError, FetchErrorKind } from "../../model/FetchError"
-import type { FetchRequestParams } from "../../model/FetchRequestParams"
+import type { FetchRequest } from "../../model/FetchRequest"
 import { FetchResponse } from "../../model/FetchResponse"
 import { ResponseCookie } from "../../model/ResponseCookie"
 import { CharsetDecoderService } from "../CharsetDecoderService"
@@ -28,7 +28,7 @@ export class CamoufoxFetchStrategy implements FetchStrategy {
     private decoder: CharsetDecoderService = new CharsetDecoderService(),
   ) {}
 
-  async fetch(params: FetchRequestParams): Promise<FetchResponse> {
+  async fetch(params: FetchRequest): Promise<FetchResponse> {
     if (!params.followRedirects) {
       throw new FetchError(
         "followRedirects=false is not supported by Camoufox (a browser always follows redirects)",

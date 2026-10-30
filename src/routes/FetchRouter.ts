@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono"
 import { validator } from "hono-openapi"
 import { FetchFailedError } from "../model/FetchError"
-import type { FetchRequestParams } from "../model/FetchRequestParams"
+import type { FetchRequest } from "../model/FetchRequest"
 import type { FetchService } from "../service/FetchService"
 import { FetchOpenApi } from "./openApi/FetchOpenApi"
 import { FetchBodySchema, FetchQuerySchema } from "./schemas/FetchSchemas"
@@ -19,7 +19,7 @@ export class FetchRouter {
     )
   }
 
-  private async handle(c: Context, params: FetchRequestParams): Promise<Response> {
+  private async handle(c: Context, params: FetchRequest): Promise<Response> {
     try {
       const response = await this.fetchService.fetchDetails(params)
 

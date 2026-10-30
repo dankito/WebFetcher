@@ -1,6 +1,6 @@
 import { FetchEngine } from "../model/FetchEngine"
 import { FetchAttempt, FetchError, FetchErrorKind, FetchFailedError } from "../model/FetchError"
-import type { FetchRequestParams } from "../model/FetchRequestParams"
+import type { FetchRequest } from "../model/FetchRequest"
 import type { FetchResponse } from "../model/FetchResponse"
 import type { FetchStrategy } from "./engine/FetchStrategy"
 import { HtmlSanitizerService } from "./HtmlSanitizerService"
@@ -17,7 +17,7 @@ export class FetchService {
   ) {}
 
   /** Only the (sanitized) response content. */
-  async fetchContent(params: FetchRequestParams): Promise<string> {
+  async fetchContent(params: FetchRequest): Promise<string> {
     const response = await this.fetchDetails(params)
 
     return response.content
@@ -28,7 +28,7 @@ export class FetchService {
    * (unless `executeJavaScript` is false) if a JS wall was detected in a response of an engine without JS.
    * @throws FetchFailedError if no engine delivered a usable response
    */
-  async fetchDetails(params: FetchRequestParams): Promise<FetchResponse> {
+  async fetchDetails(params: FetchRequest): Promise<FetchResponse> {
     const start = performance.now()
     const candidates = this.selectStrategies(params)
 
@@ -58,7 +58,7 @@ export class FetchService {
     throw new FetchFailedError(`Fetching failed with all strategies (${summary})`, attempts)
   }
 
-  private selectStrategies(params: FetchRequestParams): FetchStrategy[] {
+  private selectStrategies(params: FetchRequest): FetchStrategy[] {
     const requested = params.strategies ?? this.strategies.map((strategy) => strategy.engine)
     const engines: FetchEngine[] = [...new Set(requested)]
     const needsJavaScript = params.executeJavaScript === true || params.loadLazyContent === true
@@ -69,7 +69,7 @@ export class FetchService {
       .filter((strategy) => !needsJavaScript || strategy.executesJavaScript)
   }
 
-  private findProblem(strategy: FetchStrategy, params: FetchRequestParams, response: FetchResponse): FetchAttempt | undefined {
+  private findProblem(strategy: FetchStrategy, params: FetchRequest, response: FetchResponse): FetchAttempt | undefined {
     if (!this.isAcceptableStatus(response.statusCode, params)) {
       return new FetchAttempt(
         strategy.engine,
@@ -96,7 +96,7 @@ export class FetchService {
     return undefined
   }
 
-  private isAcceptableStatus(statusCode: number, params: FetchRequestParams): boolean {
+  private isAcceptableStatus(statusCode: number, params: FetchRequest): boolean {
     if (statusCode >= 200 && statusCode <= 299) {
       return true
     }

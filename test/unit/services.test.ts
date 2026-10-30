@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { FetchEngine } from "../../src/model/FetchEngine"
 import { FetchError, FetchErrorKind, FetchFailedError } from "../../src/model/FetchError"
-import type { FetchRequestParams } from "../../src/model/FetchRequestParams"
+import type { FetchRequest } from "../../src/model/FetchRequest"
 import { FetchResponse } from "../../src/model/FetchResponse"
 import type { FetchStrategy } from "../../src/service/engine/FetchStrategy"
 import { CharsetDecoderService } from "../../src/service/CharsetDecoderService"
@@ -89,7 +89,7 @@ describe("JsWallDetectorService", () => {
 })
 
 describe("FetchService", () => {
-  const params = (overrides: Partial<FetchRequestParams> = {}): FetchRequestParams => ({
+  const params = (overrides: Partial<FetchRequest> = {}): FetchRequest => ({
     url: "https://example.com/",
     followRedirects: true,
     ...overrides,
