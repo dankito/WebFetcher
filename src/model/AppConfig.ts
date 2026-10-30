@@ -2,7 +2,7 @@ export class AppConfig {
 
   constructor(
     readonly version: string = "0.0.0",
-    readonly port: number = 3035,
+    readonly port: number = 3031,
     readonly host: string = "127.0.0.1",
     /** e.g. `/web-fetcher`; empty string = no base path. No trailing slash. */
     readonly basePath: string = "",
