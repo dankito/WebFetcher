@@ -1,6 +1,6 @@
 {
   "name": "web-fetcher",
-  "version": "1.0.0",
+  "version": "0.5.0",
   "type": "module",
   "dependencies": {
     "@hono/standard-validator": "^0.4.1",
