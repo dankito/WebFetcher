@@ -7,6 +7,11 @@ import { CharsetDecoderService } from "../CharsetDecoderService"
 import { Stopwatch } from "../Stopwatch"
 import type { Fetcher } from "./Fetcher"
 
+interface VersionedBrowser {
+  browser: Browser
+  version: number
+}
+
 /** Plain HTTP client with browser TLS / HTTP2 fingerprint impersonation. Does not execute JavaScript. */
 export class ImpitFetcher implements Fetcher {
 
@@ -32,12 +37,22 @@ export class ImpitFetcher implements Fetcher {
     "firefox144",
   ]
 
+  /** Unversioned browsers, which impit resolves to the latest version of that family. */
+  private static readonly FAMILIES: Browser[] = ["chrome", "firefox"]
+
+  /** Unversioned "chrome" = always the latest Chrome profile of the installed impit version. */
   private static readonly DEFAULT_BROWSER: Browser = "chrome"
+
+  private static readonly DEFAULT_TIMEOUT_MS = 60_000
+
+  /** Versioned browsers per family, highest version first. */
+  private static readonly VERSIONS_BY_FAMILY = ImpitFetcher.indexVersions()
 
 
   readonly engine = FetchEngine.Impit
   readonly executesJavaScript = false
 
+  /** No cookie jar is configured, so clients keep no cookie state and can be shared between requests. */
   private readonly clients = new Map<Browser, Impit>()
 
   constructor(private readonly decoder: CharsetDecoderService) {}
@@ -52,7 +67,7 @@ export class ImpitFetcher implements Fetcher {
       const response = await client.fetch(request.url, {
         method: "GET",
         headers: request.headersWithCookie,
-        timeout: request.timeoutMs ?? null,
+        timeout: request.timeoutMs ?? ImpitFetcher.DEFAULT_TIMEOUT_MS,
         redirect: request.followRedirects ? "follow" : "manual",
       })
 
@@ -96,23 +111,33 @@ export class ImpitFetcher implements Fetcher {
       return exact
     }
 
-    const match = /^(chrome|firefox)(\d+)$/.exec(normalized)
+    const match = /^([a-z]+)(\d+)$/.exec(normalized)
+    const family = ImpitFetcher.FAMILIES.find(candidate => candidate === match?.[1])
 
-    if (!match) {
+    if (!match || !family) {
       return ImpitFetcher.DEFAULT_BROWSER
     }
 
-    const family = match[1] as "chrome" | "firefox"
     const requestedVersion = Number(match[2])
+    const lower = ImpitFetcher.VERSIONS_BY_FAMILY.get(family)?.find(entry => entry.version <= requestedVersion)
 
-    const lowerVersions = ImpitFetcher.SUPPORTED_BROWSERS.map(browser => ({
-      browser,
-      version: Number(browser.slice(family.length)),
-    }))
-      .filter(entry => entry.browser.startsWith(family) && entry.version > 0 && entry.version <= requestedVersion)
-      .sort((a, b) => b.version - a.version)
+    return lower?.browser ?? family
+  }
 
-    return lowerVersions[0]?.browser ?? family
+  private static indexVersions(): Map<Browser, VersionedBrowser[]> {
+    const index = new Map<Browser, VersionedBrowser[]>()
+
+    for (const family of ImpitFetcher.FAMILIES) {
+      const entries = ImpitFetcher.SUPPORTED_BROWSERS
+        .filter(browser => browser.startsWith(family))
+        .map(browser => ({ browser, version: Number(browser.slice(family.length)) }))
+        .filter(entry => entry.version > 0)
+        .sort((a, b) => b.version - a.version)
+
+      index.set(family, entries)
+    }
+
+    return index
   }
 
   private collectHeaders(responseHeaders: Headers): Record<string, string> {
