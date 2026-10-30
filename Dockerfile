@@ -1,17 +1,16 @@
 # ==============================================================================
-# Build Stage
+# Build Stage: Install dependencies & prepare files
 # ==============================================================================
 FROM oven/bun:1-slim AS builder
 
 WORKDIR /app
 
-# Install production dependencies
+# 1. Install production dependencies (cached unless package.json/bun.lock change)
 COPY package.json bun.lock tsconfig.json ./
 RUN bun install --frozen-lockfile --production
 
-# Copy source files
+# 2. Copy source code
 COPY src ./src
-
 
 # ==============================================================================
 # Final Runtime Stage
@@ -23,7 +22,7 @@ WORKDIR /app
 # Version ARG from GitHub Action / build workflow
 ARG VERSION=1.0.0
 
-# Install runtime dependencies for Firefox / Camoufox, Impit and Xvfb
+# 1. System packages (changes very rarely)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
     ca-certificates \
@@ -55,13 +54,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy installed node_modules and built application from builder stage
-COPY --from=builder /app /app
-
-# Pre-fetch Camoufox browser binaries into the image so they don't need to be downloaded at first launch
-RUN bun run camoufox:fetch
-
-# Environment configuration with default values
+# 2. Environment variables & data directory
 ENV HOST=0.0.0.0 \
     PORT=3031 \
     BASE_PATH="" \
@@ -74,6 +67,15 @@ ENV HOST=0.0.0.0 \
 RUN mkdir -p ${CAMOUFOX_DATA_DIR}
 
 VOLUME ${CAMOUFOX_DATA_DIR}
+
+# 3. Copy dependencies and pre-fetch Camoufox browser
+# (Only invalidates when package.json / bun.lock change, NOT on src/ edits)
+COPY --from=builder /app/package.json /app/bun.lock ./
+COPY --from=builder /app/node_modules ./node_modules
+RUN bun run camoufox:fetch
+
+# 4. Copy application source code (fast layer, changes frequently)
+COPY --from=builder /app/src ./src
 
 # Expose the default port
 EXPOSE ${PORT}
