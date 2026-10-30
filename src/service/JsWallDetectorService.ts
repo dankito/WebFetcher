@@ -58,8 +58,8 @@ export class JsWallDetectorService {
     }
 
     const noscriptBlocks = html.match(/<noscript[\s\S]*?<\/noscript>/gi) ?? []
-    const hintInNoscript = noscriptBlocks.some((block) =>
-      JsWallDetectorService.TEXT_PATTERNS.some((pattern) => pattern.test(block)),
+    const hintInNoscript = noscriptBlocks.some(block =>
+      JsWallDetectorService.TEXT_PATTERNS.some(pattern => pattern.test(block)),
     )
 
     if (hintInNoscript && visibleText.length < JsWallDetectorService.MIN_VISIBLE_TEXT_LENGTH) {

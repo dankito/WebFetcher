@@ -1,7 +1,10 @@
-import { AppConfig } from "./AppConfig"
 import pkg from "../../package.json"
+import { AppConfig } from "./AppConfig"
 
-/** Parses an AppConfig from environment variables: PORT, HOST, BASE_PATH, CAMOUFOX_DATA_DIR, CAMOUFOX_UNLOAD_TIMEOUT (seconds). */
+/**
+ * Parses an AppConfig from environment variables: PORT, HOST, BASE_PATH, CAMOUFOX_DATA_DIR,
+ * CAMOUFOX_IDLE_TIMEOUT (seconds), ALLOW_LOCAL_ADDRESSES (true / false).
+ */
 export class AppConfigParser {
 
   parse(env: Record<string, string | undefined> = process.env): AppConfig {
@@ -13,7 +16,8 @@ export class AppConfigParser {
       this.parseString(env.HOST, defaults.host),
       this.parseBasePath(env.BASE_PATH),
       this.parseString(env.CAMOUFOX_DATA_DIR, defaults.camoufoxDataDir),
-      this.parseNumber(env.CAMOUFOX_UNLOAD_TIMEOUT, "CAMOUFOX_UNLOAD_TIMEOUT", defaults.camoufoxUnloadTimeout),
+      this.parseNumber(env.CAMOUFOX_IDLE_TIMEOUT, "CAMOUFOX_IDLE_TIMEOUT", defaults.camoufoxIdleTimeout),
+      this.parseBoolean(env.ALLOW_LOCAL_ADDRESSES, "ALLOW_LOCAL_ADDRESSES", defaults.allowLocalAddresses),
     )
   }
 
@@ -37,6 +41,21 @@ export class AppConfigParser {
     }
 
     return parsed
+  }
+
+  private parseBoolean(value: string | undefined, name: string, defaultValue: boolean): boolean {
+    if (value === undefined || value.trim() === "") {
+      return defaultValue
+    }
+
+    switch (value.trim().toLowerCase()) {
+      case "true":
+        return true
+      case "false":
+        return false
+      default:
+        throw new Error(`Invalid value for ${name}: "${value}" (expected true or false)`)
+    }
   }
 
   private parseBasePath(value: string | undefined): string {

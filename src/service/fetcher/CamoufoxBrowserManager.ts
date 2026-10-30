@@ -4,8 +4,8 @@ import type { BrowserContext } from "playwright-core"
 
 export class CamoufoxLease {
   constructor(
-    public context: BrowserContext,
-    public release: () => void,
+    readonly context: BrowserContext,
+    readonly release: () => void,
   ) {}
 }
 
@@ -17,25 +17,44 @@ class BrowserSlot {
 }
 
 /**
- * Lazily launches Camoufox and unloads it again `unloadTimeoutSeconds` after its last use.
+ * Implementation detail of the CamoufoxFetcher.
+ *
+ * Downloads Camoufox in the background as soon as the instance is created (if it is not installed yet),
+ * launches it lazily and unloads it again `idleTimeoutSeconds` after its last use.
  * There are two persistent browser profiles, because JavaScript can only be switched off per browser (Firefox pref),
  * not per page: one with JavaScript and one without. Each is launched / unloaded independently.
  * Cookies live in the profile and are therefore shared between requests (e.g. a Cloudflare clearance cookie gets reused).
  */
 export class CamoufoxBrowserManager {
-  private slots = { js: new BrowserSlot(), noJs: new BrowserSlot() }
+  private readonly slots = { js: new BrowserSlot(), noJs: new BrowserSlot() }
+
+  /** Resolves to an Error if the installation failed. Never rejects. */
+  private installation: Promise<Error | undefined>
 
   constructor(
-    private dataDir: string,
-    private unloadTimeoutSeconds: number,
-  ) {}
+    private readonly dataDir: string,
+    private readonly idleTimeoutSeconds: number,
+  ) {
+    this.installation = this.install()
+  }
 
-  async acquire(javaScriptEnabled: boolean): Promise<CamoufoxLease> {
+  /** Returns an Error instead of throwing if Camoufox is not installed or can't be launched. */
+  async acquire(javaScriptEnabled: boolean): Promise<CamoufoxLease | Error> {
+    const installError = await this.installation
+
+    if (installError) {
+      // retry the installation with the next request
+      this.installation = this.install()
+
+      return installError
+    }
+
     const slot = javaScriptEnabled ? this.slots.js : this.slots.noJs
 
     this.cancelUnload(slot)
     slot.activeLeases++
 
+    // library boundary: camoufox / playwright report problems by throwing
     try {
       const context = await this.ensureLaunched(slot, javaScriptEnabled)
       let released = false
@@ -55,13 +74,29 @@ export class CamoufoxBrowserManager {
     } catch (error) {
       slot.activeLeases--
       this.scheduleUnload(slot)
-      throw error
+
+      return error instanceof Error ? error : new Error(String(error))
     }
   }
 
   /** Closes all browsers immediately, e.g. on shutdown. */
   async close(): Promise<void> {
     await Promise.all([this.unload(this.slots.js, true), this.unload(this.slots.noJs, true)])
+  }
+
+  private async install(): Promise<Error | undefined> {
+    // library boundary: the installer reports problems by throwing
+    try {
+      const { ensureCamoufoxInstalled } = await import("camoufox-js/dist/pkgman.js")
+
+      await ensureCamoufoxInstalled()
+
+      return undefined
+    } catch (error) {
+      console.error("Installing Camoufox failed:", error instanceof Error ? error.message : error)
+
+      return error instanceof Error ? error : new Error(String(error))
+    }
   }
 
   private async ensureLaunched(slot: BrowserSlot, javaScriptEnabled: boolean): Promise<BrowserContext> {
@@ -71,7 +106,7 @@ export class CamoufoxBrowserManager {
 
     if (!slot.launching) {
       slot.launching = this.launch(javaScriptEnabled)
-        .then((context) => {
+        .then(context => {
           slot.context = context
           context.on("close", () => {
             if (slot.context === context) {
@@ -94,7 +129,7 @@ export class CamoufoxBrowserManager {
 
     await mkdir(userDataDir, { recursive: true })
 
-    // imported lazily so that the app starts fast and without Camoufox if it is never needed
+    // imported lazily so that the app starts fast
     const { Camoufox } = await import("camoufox-js")
 
     console.log(`Launching Camoufox (javaScript=${javaScriptEnabled}, profile=${userDataDir})`)
@@ -117,7 +152,7 @@ export class CamoufoxBrowserManager {
     this.cancelUnload(slot)
 
     // unref: a pending unload must not keep the process alive
-    slot.unloadTimer = setTimeout(() => void this.unload(slot, false), this.unloadTimeoutSeconds * 1000)
+    slot.unloadTimer = setTimeout(() => void this.unload(slot, false), this.idleTimeoutSeconds * 1000)
     slot.unloadTimer.unref()
   }
 
@@ -138,10 +173,6 @@ export class CamoufoxBrowserManager {
 
     console.log("Unloading Camoufox")
 
-    try {
-      await context.close()
-    } catch (error) {
-      console.warn("Closing Camoufox failed:", error)
-    }
+    await context.close().catch(error => console.warn("Closing Camoufox failed:", error))
   }
 }

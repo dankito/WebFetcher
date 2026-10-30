@@ -3,32 +3,34 @@ import { AppConfigParser } from "./model/AppConfigParser"
 import { FetchRouter } from "./routes/FetchRouter"
 import { McpRouter } from "./routes/McpRouter"
 import { OpenApiRouter } from "./routes/OpenApiRouter"
-import { CamoufoxBrowserManager } from "./service/engine/CamoufoxBrowserManager"
-import { CamoufoxFetchStrategy } from "./service/engine/CamoufoxFetchStrategy"
-import { ImpitFetchStrategy } from "./service/engine/ImpitFetchStrategy"
 import { CharsetDecoderService } from "./service/CharsetDecoderService"
+import { CamoufoxFetcher } from "./service/fetcher/CamoufoxFetcher"
+import { ImpitFetcher } from "./service/fetcher/ImpitFetcher"
 import { FetchService } from "./service/FetchService"
+import { UrlGuardService } from "./service/UrlGuardService"
+import { SetCookieParser } from "./service/SetCookieParser"
 
 const config = new AppConfigParser().parse()
 
 const decoder = new CharsetDecoderService()
-const camoufoxManager = new CamoufoxBrowserManager(config.camoufoxDataDir, config.camoufoxUnloadTimeout)
+// starts downloading Camoufox in the background if it is not installed yet
+const camoufoxFetcher = new CamoufoxFetcher(config, decoder)
 
 // the order here is the default order of the engines
-const fetchService = new FetchService([
-  new ImpitFetchStrategy(decoder),
-  new CamoufoxFetchStrategy(camoufoxManager, decoder),
-])
+const fetchService = new FetchService(
+  [new ImpitFetcher(decoder), camoufoxFetcher],
+  new UrlGuardService(config.allowLocalAddresses),
+)
 
 const app = new Hono()
-app.route("/", new FetchRouter(fetchService).router)
+app.route("/", new FetchRouter(fetchService, new SetCookieParser()).router)
 app.route("/", new McpRouter(fetchService).router)
 app.route("/", new OpenApiRouter(app, config).router)
 
-app.onError((error, c) => {
+app.onError((error, context) => {
   console.error("Unhandled error:", error)
 
-  return c.json({ error: error.message }, 500)
+  return context.json({ error: error.message }, 500)
 })
 
 const root = new Hono()
@@ -43,11 +45,11 @@ Bun.serve({
 })
 
 console.log(
-  `web-fetcher v${config.version} listening on http://${config.host}:${config.port} (basePath="${config.basePath}")`,
+  `web-fetcher v${config.version} listening on http://${config.host}:${config.port} (basePath="${config.basePath}", allowLocalAddresses=${config.allowLocalAddresses})`,
 )
 
 async function shutdown() {
-  await camoufoxManager.close()
+  await camoufoxFetcher.close()
   process.exit(0)
 }
 

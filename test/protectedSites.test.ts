@@ -2,19 +2,22 @@
  * Integration tests against real, bot-protected sites. They need internet access and a downloaded Camoufox
  * (`bun run camoufox:fetch`). Sites change, so a failing test can also mean that the site changed its protection.
  *
- * Each site is tested with each engine on its own (`strategies: [engine]`, so no escalation).
+ * Each site is tested with each engine on its own (`engines: [engine]`, so no escalation).
  * `passes` lists the engines that are expected to get through. All others are expected to fail.
  *
  *   bun test test/protectedSites.test.ts
  */
 import { afterAll, describe, expect, test } from "bun:test"
 import { FetchEngine } from "../src/model/FetchEngine"
-import { FetchFailedError } from "../src/model/FetchError"
-import type { FetchRequest } from "../src/model/FetchRequest"
-import { CamoufoxBrowserManager } from "../src/service/engine/CamoufoxBrowserManager"
-import { CamoufoxFetchStrategy } from "../src/service/engine/CamoufoxFetchStrategy"
-import { ImpitFetchStrategy } from "../src/service/engine/ImpitFetchStrategy"
+import { AppConfig } from "../src/model/AppConfig"
+import { FetchError } from "../src/model/FetchError"
+import { FetchRequest } from "../src/model/FetchRequest"
+import type { FetchResponse } from "../src/model/FetchResponse"
+import { CharsetDecoderService } from "../src/service/CharsetDecoderService"
+import { CamoufoxFetcher } from "../src/service/fetcher/CamoufoxFetcher"
+import { ImpitFetcher } from "../src/service/fetcher/ImpitFetcher"
 import { FetchService } from "../src/service/FetchService"
+import { UrlGuardService } from "../src/service/UrlGuardService"
 
 class ProtectedSite {
   constructor(
@@ -45,34 +48,30 @@ const sites = [
 /** Per test: browser launch + challenge + timeout of the site */
 const TEST_TIMEOUT_MS = 120_000
 
-const camoufoxManager = new CamoufoxBrowserManager("./data/camoufox-test", 5)
-const strategies = {
-  [FetchEngine.Impit]: new ImpitFetchStrategy(),
-  [FetchEngine.Camoufox]: new CamoufoxFetchStrategy(camoufoxManager),
+const decoder = new CharsetDecoderService()
+const camoufoxFetcher = new CamoufoxFetcher(new AppConfig("test", 0, "127.0.0.1", "", "./data/camoufox-test", 5), decoder)
+const fetchers = {
+  [FetchEngine.Impit]: new ImpitFetcher(decoder),
+  [FetchEngine.Camoufox]: camoufoxFetcher,
 }
 
 afterAll(async () => {
-  await camoufoxManager.close()
+  await camoufoxFetcher.close()
 })
 
-describe.each(Object.values(FetchEngine))("%s", (engine) => {
-  test.each(sites)("$name", async (site) => {
-    const service = new FetchService([strategies[engine]])
-    const params: FetchRequest = {
-      url: site.url,
-      followRedirects: true,
-      strategies: [engine],
-      timeout: site.timeoutSeconds,
-    }
+describe.each(Object.values(FetchEngine))("%s", engine => {
+  test.each(sites)("$name", async site => {
+    const service = new FetchService([fetchers[engine]], new UrlGuardService(false))
+    const request = new FetchRequest(site.url, site.timeoutSeconds, undefined, true, [engine])
 
     if (site.passes.includes(engine)) {
-      const response = await service.fetchDetails(params)
+      const response = await service.fetchDetails(request)
 
-      expect(response.engine).toBe(engine)
-      expect(response.statusCode).toBe(200)
-      expect(response.content).toContain(site.expectedText)
+      expect(response).not.toBeInstanceOf(FetchError)
+      expect(response).toMatchObject({ engine, statusCode: 200 })
+      expect((response as FetchResponse).content).toContain(site.expectedText)
     } else {
-      await expect(service.fetchDetails(params)).rejects.toBeInstanceOf(FetchFailedError)
+      expect(await service.fetchDetails(request)).toBeInstanceOf(FetchError)
     }
   }, TEST_TIMEOUT_MS)
 })

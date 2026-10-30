@@ -22,6 +22,9 @@ export class OpenApiRouter {
       }),
     )
 
-    this.router.get("/swagger-ui", swaggerUI({ url: `${config.basePath}/openapi.json` }))
+    this.router.get("/swagger-ui", swaggerUI({
+      url: `${config.basePath}/openapi.json`,
+      tryItOutEnabled: true,
+    }))
   }
 }

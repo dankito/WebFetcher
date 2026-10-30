@@ -1,92 +1,120 @@
-import { FetchEngine } from "../model/FetchEngine"
-import { FetchAttempt, FetchError, FetchErrorKind, FetchFailedError } from "../model/FetchError"
+import { EngineFailure, EngineFailureKind } from "../model/EngineFailure"
+import type { FetchEngine } from "../model/FetchEngine"
+import { FetchError, FetchErrorReason } from "../model/FetchError"
 import type { FetchRequest } from "../model/FetchRequest"
 import type { FetchResponse } from "../model/FetchResponse"
-import type { FetchStrategy } from "./engine/FetchStrategy"
+import type { Fetcher } from "./fetcher/Fetcher"
 import { HtmlSanitizerService } from "./HtmlSanitizerService"
 import { JsWallDetectorService } from "./JsWallDetectorService"
+import { Stopwatch } from "./Stopwatch"
+import type { UrlGuardService } from "./UrlGuardService"
 
 export class FetchService {
   /**
-   * @param strategies registered engines; their order is the default order
+   * @param fetchers registered engines; their order is the default order
    */
   constructor(
-    private strategies: FetchStrategy[],
-    private htmlSanitizer: HtmlSanitizerService = new HtmlSanitizerService(),
-    private jsWallDetector: JsWallDetectorService = new JsWallDetectorService(),
+    private readonly fetchers: Fetcher[],
+    private readonly urlGuard: UrlGuardService,
+    private readonly htmlSanitizer: HtmlSanitizerService = new HtmlSanitizerService(),
+    private readonly jsWallDetector: JsWallDetectorService = new JsWallDetectorService(),
   ) {}
 
-  /** Only the (sanitized) response content. */
-  async fetchContent(params: FetchRequest): Promise<string> {
-    const response = await this.fetchDetails(params)
+  /** Only the (sanitized) response content: text, or the raw bytes of binary responses. */
+  async fetchContent(request: FetchRequest): Promise<string | Uint8Array | FetchError> {
+    const result = await this.fetchDetails(request)
 
-    return response.content
+    if (result instanceof FetchError) {
+      return result
+    }
+
+    return result.content
   }
 
   /**
-   * Tries the engines in order and escalates to the next one on errors, status codes > 299 or
+   * Tries the engines in order and escalates to the next one on failures, status codes > 299 or
    * (unless `executeJavaScript` is false) if a JS wall was detected in a response of an engine without JS.
-   * @throws FetchFailedError if no engine delivered a usable response
+   * Returns a FetchError if no engine delivered a usable response.
    */
-  async fetchDetails(params: FetchRequest): Promise<FetchResponse> {
-    const start = performance.now()
-    const candidates = this.selectStrategies(params)
+  async fetchDetails(request: FetchRequest): Promise<FetchResponse | FetchError> {
+    const stopwatch = Stopwatch.start()
+    const violation = await this.urlGuard.findViolation(request.url)
+
+    if (violation !== undefined) {
+      return new FetchError(FetchErrorReason.ForbiddenAddress, violation)
+    }
+
+    const candidates = this.selectFetchers(request)
 
     if (candidates.length === 0) {
-      throw new FetchFailedError("No fetch strategy applicable for the given parameters", [])
+      return new FetchError(
+        FetchErrorReason.NoApplicableEngine,
+        "No engine applicable for the given engines and options (e.g. executeJavaScript=true requires a JavaScript engine)",
+      )
     }
 
-    const attempts: FetchAttempt[] = []
+    const failures: EngineFailure[] = []
 
-    for (const strategy of candidates) {
-      try {
-        const response = await strategy.fetch(params)
-        const problem = this.findProblem(strategy, params, response)
+    for (const fetcher of candidates) {
+      const result = await fetcher.fetch(request)
 
-        if (problem === undefined) {
-          return this.finalize(response, start)
-        }
-
-        attempts.push(problem)
-      } catch (error) {
-        attempts.push(this.toAttempt(strategy, error))
+      if (result instanceof EngineFailure) {
+        failures.push(result)
+        continue
       }
+
+      const problem = this.findProblem(fetcher, request, result)
+
+      if (problem === undefined) {
+        return this.finalize(result, stopwatch)
+      }
+
+      failures.push(problem)
     }
 
-    const summary = attempts.map((attempt) => `${attempt.engine}: ${attempt.message}`).join("; ")
+    const allTimeouts = failures.every(failure => failure.kind === EngineFailureKind.Timeout)
+    const summary = failures.map(failure => `${failure.engine}: ${failure.message}`).join("; ")
 
-    throw new FetchFailedError(`Fetching failed with all strategies (${summary})`, attempts)
+    return new FetchError(
+      allTimeouts ? FetchErrorReason.Timeout : FetchErrorReason.AllEnginesFailed,
+      `Fetching failed with all engines (${summary})`,
+      failures,
+    )
   }
 
-  private selectStrategies(params: FetchRequest): FetchStrategy[] {
-    const requested = params.strategies ?? this.strategies.map((strategy) => strategy.engine)
+  private selectFetchers(request: FetchRequest): Fetcher[] {
+    const requested = request.engines ?? this.fetchers.map(fetcher => fetcher.engine)
     const engines: FetchEngine[] = [...new Set(requested)]
-    const needsJavaScript = params.executeJavaScript === true || params.loadLazyContent === true
 
-    return engines
-      .map((engine) => this.strategies.find((strategy) => strategy.engine === engine))
-      .filter((strategy): strategy is FetchStrategy => strategy !== undefined)
-      .filter((strategy) => !needsJavaScript || strategy.executesJavaScript)
+    return engines.flatMap(engine => {
+      const fetcher = this.fetchers.find(candidate => candidate.engine === engine)
+
+      if (fetcher === undefined || (request.requiresJavaScript && !fetcher.executesJavaScript)) {
+        return []
+      }
+
+      return [fetcher]
+    })
   }
 
-  private findProblem(strategy: FetchStrategy, params: FetchRequest, response: FetchResponse): FetchAttempt | undefined {
-    if (!this.isAcceptableStatus(response.statusCode, params)) {
-      return new FetchAttempt(
-        strategy.engine,
-        FetchErrorKind.HttpStatus,
+  private findProblem(fetcher: Fetcher, request: FetchRequest, response: FetchResponse): EngineFailure | undefined {
+    if (!this.isAcceptableStatus(response.statusCode, request)) {
+      return new EngineFailure(
+        fetcher.engine,
+        EngineFailureKind.HttpStatus,
         `HTTP status ${response.statusCode}`,
         response.statusCode,
       )
     }
 
     // Engines with JavaScript render the page themselves: a <noscript> hint in the DOM is no wall there
-    if (response.isHtml && !strategy.executesJavaScript && params.executeJavaScript !== false) {
+    if (typeof response.content === "string" && response.isHtml && !fetcher.executesJavaScript && !request.javaScriptDisabled) {
       const reason = this.jsWallDetector.detect(response.content)
 
       if (reason !== undefined) {
-        return new FetchAttempt(
-          strategy.engine,
-          FetchErrorKind.JsWall,
+        return new EngineFailure(
+          fetcher.engine,
+          EngineFailureKind.JsWall,
           `JavaScript required (${reason})`,
           response.statusCode,
         )
@@ -96,32 +124,23 @@ export class FetchService {
     return undefined
   }
 
-  private isAcceptableStatus(statusCode: number, params: FetchRequest): boolean {
+  private isAcceptableStatus(statusCode: number, request: FetchRequest): boolean {
     if (statusCode >= 200 && statusCode <= 299) {
       return true
     }
 
     // without following redirects a 3xx is the expected result
-    return !params.followRedirects && statusCode >= 300 && statusCode <= 399
+    return !request.followRedirects && statusCode >= 300 && statusCode <= 399
   }
 
-  private finalize(response: FetchResponse, start: number): FetchResponse {
-    if (response.isHtml) {
-      response.content = this.htmlSanitizer.sanitize(response.content, response.finalUrl)
+  private finalize(response: FetchResponse, stopwatch: Stopwatch): FetchResponse {
+    if (typeof response.content === "string" && response.isHtml) {
+      return response.with({
+        content: this.htmlSanitizer.sanitize(response.content, response.finalUrl),
+        elapsedMs: stopwatch.elapsedMs,
+      })
     }
 
-    response.elapsedMs = Math.round(performance.now() - start)
-
-    return response
-  }
-
-  private toAttempt(strategy: FetchStrategy, error: unknown): FetchAttempt {
-    if (error instanceof FetchError) {
-      return new FetchAttempt(strategy.engine, error.kind, error.message, error.statusCode)
-    }
-
-    const message = error instanceof Error ? error.message : String(error)
-
-    return new FetchAttempt(strategy.engine, FetchErrorKind.Other, message)
+    return response.with({ elapsedMs: stopwatch.elapsedMs })
   }
 }

@@ -1,57 +1,23 @@
-import type { FetchEngine } from "./FetchEngine"
+import type { EngineFailure } from "./EngineFailure"
 
-export enum FetchErrorKind {
-  Timeout = "timeout",
-  Network = "network",
-  HttpStatus = "httpStatus",
-  JsWall = "jsWall",
-  Unsupported = "unsupported",
-  Other = "other",
+export enum FetchErrorReason {
+  /** The url points to a local / private address and AppConfig.allowLocalAddresses is false. */
+  ForbiddenAddress = "ForbiddenAddress",
+  /** No registered engine matches the requested engines and options. */
+  NoApplicableEngine = "NoApplicableEngine",
+  /** All engines ran into the timeout. */
+  Timeout = "Timeout",
+  /** All applicable engines failed. */
+  AllEnginesFailed = "AllEnginesFailed",
 }
 
-
-/** Thrown by a single engine (strategy) if it fails. */
-export class FetchError extends Error {
-
-  constructor(
-    message: string,
-    readonly engine: FetchEngine,
-    readonly kind: FetchErrorKind,
-    readonly statusCode?: number,
-    options?: ErrorOptions,
-  ) {
-    super(message, options)
-    this.name = "FetchError"
-  }
-
-}
-
-
-export class FetchAttempt {
+/** Result of the FetchService if no usable response could be delivered. Returned, not thrown. */
+export class FetchError {
 
   constructor(
-    readonly engine: FetchEngine,
-    readonly kind: FetchErrorKind,
+    readonly reason: FetchErrorReason,
     readonly message: string,
-    readonly statusCode?: number,
+    readonly engineFailures: EngineFailure[] = [],
   ) {}
-
-}
-
-
-/** Thrown by the FetchService if no engine delivered a usable response. */
-export class FetchFailedError extends Error {
-
-  constructor(
-    message: string,
-    readonly attempts: FetchAttempt[],
-  ) {
-    super(message)
-    this.name = "FetchFailedError"
-  }
-
-  get isTimeout(): boolean {
-    return this.attempts.length > 0 && this.attempts.every((attempt) => attempt.kind === FetchErrorKind.Timeout)
-  }
 
 }

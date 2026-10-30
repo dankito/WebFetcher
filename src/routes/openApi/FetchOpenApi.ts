@@ -1,48 +1,82 @@
 import { describeRoute, resolver } from "hono-openapi"
-import { FetchErrorResponseSchema, FetchJsonResponseSchema } from "../schemas/FetchSchemas"
+import { FetchDetailsResponseSchema, FetchErrorResponseSchema } from "../schemas/FetchSchemas"
 
-const description = `Fetches the url, first with Impit (browser TLS fingerprint, no JavaScript) and escalates to Camoufox
-(anti-detect Firefox) on errors, status codes > 299 or if the page requires JavaScript.
+const errorContent = { "application/json": { schema: resolver(FetchErrorResponseSchema) } }
 
-The response type is selected by the \`Accept\` header:
-* \`application/json\`: JSON wrapper with content, status code, headers, cookies, elapsed time, final url and engine.
-* anything else: the plain response content (with the content type of the fetched response, always UTF-8).`
+const errorResponses = {
+  400: { description: "Invalid parameters or no applicable engine.", content: errorContent },
+  403: { description: "The url points to a local or private address, which is not allowed.", content: errorContent },
+  502: { description: "No engine delivered a usable response.", content: errorContent },
+  504: { description: "All engines ran into the timeout.", content: errorContent },
+}
 
-const responses = {
+const intro = `Fetches the url, first with Impit (browser TLS fingerprint, no JavaScript) and escalates to Camoufox
+(anti-detect Firefox) on failures, status codes > 299 or if the page requires JavaScript.`
+
+const contentDescription = `${intro}
+
+Returns the plain response content with the content type of the fetched response: text is always UTF-8, binary
+content (images, PDFs, ...) is returned as is. Details about the fetched response are in the \`X-Fetch-*\` headers:
+* \`X-Fetch-Engine\`, \`X-Fetch-Status\`, \`X-Fetch-Final-Url\`
+* \`X-Fetch-Header-<name>\`: every header of the fetched response (the total size of response headers is limited
+  by many clients / proxies, e.g. to 16 KB)
+* \`X-Fetch-Cookie\`: every raw \`Set-Cookie\` value of the fetched response
+
+Use \`/fetch/details\` to get everything in a JSON body.`
+
+const detailsDescription = `${intro}
+
+Returns a JSON wrapper with the content, status code, headers, cookies, elapsed time, final url and the engine that
+fetched the response. Binary content is base64 encoded (see \`contentEncoding\`).`
+
+const postHint = "Like GET, but the parameters are sent as JSON body and additionally allow `headers` and `cookies` for the target url."
+
+const contentResponses = {
   200: {
-    description: "Plain response content or (with `Accept: application/json`) the JSON wrapper.",
-    content: {
-      "application/json": { schema: resolver(FetchJsonResponseSchema) },
-      "*/*": { schema: { type: "string" as const } },
-    },
+    description: "The plain response content.",
+    content: { "*/*": { schema: { type: "string" as const, format: "binary" } } },
   },
-  400: { description: "Invalid parameters or no applicable strategy." },
-  502: {
-    description: "No engine delivered a usable response.",
-    content: { "application/json": { schema: resolver(FetchErrorResponseSchema) } },
+  ...errorResponses,
+}
+
+const detailsResponses = {
+  200: {
+    description: "The JSON wrapper.",
+    content: { "application/json": { schema: resolver(FetchDetailsResponseSchema) } },
   },
-  504: {
-    description: "All engines ran into the timeout.",
-    content: { "application/json": { schema: resolver(FetchErrorResponseSchema) } },
-  },
+  ...errorResponses,
 }
 
 export class FetchOpenApi {
-  static readonly get = describeRoute({
-    operationId: "fetchGet",
-    summary: "Fetch an url (GET)",
-    description,
+  static readonly getContent = describeRoute({
+    operationId: "fetchContentGet",
+    summary: "Fetch an url, returns the plain content (GET)",
+    description: contentDescription,
     tags: ["fetch"],
-    responses,
+    responses: contentResponses,
   })
 
-  static readonly post = describeRoute({
-    operationId: "fetchPost",
-    summary: "Fetch an url (POST)",
-    description: `${description}
-
-Like GET, but the parameters are sent as JSON body and additionally allow \`headers\` and \`cookies\` for the target url.`,
+  static readonly postContent = describeRoute({
+    operationId: "fetchContentPost",
+    summary: "Fetch an url, returns the plain content (POST)",
+    description: `${contentDescription}\n\n${postHint}`,
     tags: ["fetch"],
-    responses,
+    responses: contentResponses,
+  })
+
+  static readonly getDetails = describeRoute({
+    operationId: "fetchDetailsGet",
+    summary: "Fetch an url, returns the details as JSON (GET)",
+    description: detailsDescription,
+    tags: ["fetch"],
+    responses: detailsResponses,
+  })
+
+  static readonly postDetails = describeRoute({
+    operationId: "fetchDetailsPost",
+    summary: "Fetch an url, returns the details as JSON (POST)",
+    description: `${detailsDescription}\n\n${postHint}`,
+    tags: ["fetch"],
+    responses: detailsResponses,
   })
 }

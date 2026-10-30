@@ -1,37 +1,54 @@
+import { ContentType } from "../model/ContentType"
+
 /**
- * Decodes response bytes to a string. Charset priority:
- * BOM, Content-Type header, `<meta charset=...>` (HTML only), then fallbacks utf-8 and windows-1252 (= cp1252).
+ * Decodes response bytes. Charset priority (each candidate is only determined and tried if the previous failed):
+ * BOM, Content-Type header, `<meta charset=...>` (HTML only), then the fallbacks utf-8 and windows-1252 (= cp1252).
  */
 export class CharsetDecoderService {
-  private static readonly FALLBACK_CHARSETS = ["utf-8", "windows-1252"]
+
   private static readonly META_SNIFF_BYTES = 4096
+  private static readonly BINARY_SNIFF_BYTES = 1024
 
-  decode(bytes: Uint8Array, contentType?: string | null): string {
-    const candidates: string[] = []
 
-    const bomCharset = this.charsetFromBom(bytes)
+  /**
+   * Decodes textual responses to a string and returns binary ones (known non-text content type, or an unknown
+   * content type with NUL bytes) unchanged.
+   */
+  decodeBody(bytes: Uint8Array, contentTypeHeader?: string | null): string | Uint8Array {
+    const contentType = new ContentType(contentTypeHeader)
 
-    if (bomCharset) {
-      candidates.push(bomCharset)
+    if (contentType.isBinary) {
+      return bytes
     }
 
-    const headerCharset = this.charsetFromContentType(contentType)
-
-    if (headerCharset) {
-      candidates.push(headerCharset)
+    if (contentType.mimeType === undefined && bytes.subarray(0, CharsetDecoderService.BINARY_SNIFF_BYTES).includes(0)) {
+      return bytes
     }
 
-    if (this.mayBeHtml(contentType)) {
-      const metaCharset = this.charsetFromMeta(bytes)
+    return this.#decode(bytes, contentType)
+  }
 
-      if (metaCharset) {
-        candidates.push(metaCharset)
+  decode(bytes: Uint8Array, contentTypeHeader?: string | null): string {
+    return this.#decode(bytes, new ContentType(contentTypeHeader))
+  }
+
+  #decode(bytes: Uint8Array, contentType: ContentType): string {
+    // suppliers, so that e.g. the meta charset is only looked up if everything before it failed
+    const charsetSuppliers: (() => string | undefined)[] = [
+      () => this.charsetFromBom(bytes),
+      () => contentType.charset,
+      () => (contentType.isHtml ? this.charsetFromMeta(bytes) : undefined),
+      () => "utf-8",
+      () => "windows-1252",
+    ]
+
+    for (const supplier of charsetSuppliers) {
+      const charset = supplier()
+
+      if (charset === undefined) {
+        continue
       }
-    }
 
-    candidates.push(...CharsetDecoderService.FALLBACK_CHARSETS)
-
-    for (const charset of candidates) {
       const decoded = this.tryDecode(bytes, charset)
 
       if (decoded !== undefined) {
@@ -50,22 +67,6 @@ export class CharsetDecoderService {
       // unknown label or invalid byte sequence for this charset
       return undefined
     }
-  }
-
-  private mayBeHtml(contentType?: string | null): boolean {
-    if (!contentType) {
-      return true
-    }
-
-    return /html|xml/i.test(contentType)
-  }
-
-  private charsetFromContentType(contentType?: string | null): string | undefined {
-    if (!contentType) {
-      return undefined
-    }
-
-    return /charset\s*=\s*["']?([^\s;"']+)/i.exec(contentType)?.[1]
   }
 
   private charsetFromMeta(bytes: Uint8Array): string | undefined {
