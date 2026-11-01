@@ -31,6 +31,10 @@ app.route("/", new FetchRouter(fetchService, new SetCookieParser()).router)
 app.route("/", new McpRouter(fetchService).router)
 app.route("/", new OpenApiRouter(app, config).router)
 
+app.get("/health", context => {
+  return context.json({ status: "ok", timestamp: new Date().toISOString() })
+})
+
 app.onError((error, context) => {
   console.error("Unhandled error:", error)
 
