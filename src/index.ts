@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { logger } from "hono/logger"
 import { AppConfigParser } from "./model/AppConfigParser"
 import { FetchRouter } from "./routes/FetchRouter"
 import { McpRouter } from "./routes/McpRouter"
@@ -23,6 +24,9 @@ const fetchService = new FetchService(
 )
 
 const app = new Hono()
+
+app.use("*", logger()) // request logger always registers for the root, not for basePath
+
 app.route("/", new FetchRouter(fetchService, new SetCookieParser()).router)
 app.route("/", new McpRouter(fetchService).router)
 app.route("/", new OpenApiRouter(app, config).router)
