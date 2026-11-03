@@ -1,5 +1,6 @@
 import { Hono } from "hono"
 import { logger } from "hono/logger"
+import { prometheus } from "@hono/prometheus"
 import { AppConfigParser } from "./model/AppConfigParser"
 import { FetchRouter } from "./routes/FetchRouter"
 import { McpRouter } from "./routes/McpRouter"
@@ -24,6 +25,12 @@ const fetchService = new FetchService(
 )
 
 const app = new Hono()
+
+
+// add metrics. Include this before app.use("*", logger()) so that requests to /metrics are not logged
+const { printMetrics, registerMetrics } = prometheus()
+app.use("*", registerMetrics)
+app.get("/metrics", printMetrics)
 
 app.use("*", logger()) // request logger always registers for the root, not for basePath
 
