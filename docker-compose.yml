@@ -1,0 +1,18 @@
+services:
+
+  web-fetcher:
+    image: ghcr.io/dankito/web-fetcher:latest
+    container_name: web-fetcher
+    restart: unless-stopped
+    ports:
+      - "3031:3031"
+    environment:
+      # Optional: configure the port and interface to listen on:
+      - HOST=0.0.0.0
+      - PORT=3031
+      - ALLOW_LOCAL_ADDRESSES=false
+    volumes:
+      - web-fetcher-data:/data
+
+volumes:
+  web-fetcher-data:
