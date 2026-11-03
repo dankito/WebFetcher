@@ -1,0 +1,1691 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Web Fetcher",
+    "description": "Fetches urls and circumvents anti-bot detection: Impit first, Camoufox as fallback.",
+    "version": "0.6.0"
+  },
+  "components": {},
+  "paths": {
+    "/fetch": {
+      "get": {
+        "operationId": "fetchContentGet",
+        "summary": "Fetch an url, returns the plain content (GET)",
+        "description": "Fetches the url, first with Impit (browser TLS fingerprint, no JavaScript) and escalates to Camoufox\n(anti-detect Firefox) on failures, status codes > 299 or if the page requires JavaScript.\n\nReturns the plain response content with the content type of the fetched response: text is always UTF-8, binary\ncontent (images, PDFs, ...) is returned as is. Details about the fetched response are in the `X-Fetch-*` headers:\n* `X-Fetch-Engine`, `X-Fetch-Status`, `X-Fetch-Final-Url`\n* `X-Fetch-Header-<name>`: every header of the fetched response (the total size of response headers is limited\n  by many clients / proxies, e.g. to 16 KB)\n* `X-Fetch-Cookie`: every raw `Set-Cookie` value of the fetched response\n\nUse `/fetch/details` to get everything in a JSON body.",
+        "tags": [
+          "fetch"
+        ],
+        "responses": {
+          "200": {
+            "description": "The plain response content.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters or no applicable engine.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The url points to a local or private address, which is not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "No engine delivered a usable response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "All engines ran into the timeout.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "url",
+            "schema": {
+              "type": "string",
+              "format": "uri"
+            },
+            "required": true,
+            "description": "The url to fetch (http or https)."
+          },
+          {
+            "in": "query",
+            "name": "timeout",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Timeout in seconds. Unset or < 1 = no timeout."
+          },
+          {
+            "in": "query",
+            "name": "fingerprint",
+            "schema": {
+              "type": "string",
+              "pattern": "^(firefox|chrome)\\d*$"
+            },
+            "description": "Browser fingerprint like `firefox`, `chrome`, `firefox144` or `chrome131`. Defaults to `chrome`. Camoufox always uses Firefox."
+          },
+          {
+            "in": "query",
+            "name": "followRedirects",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Follow redirects. Defaults to true. Ignored by Camoufox (a browser always follows redirects)."
+          },
+          {
+            "in": "query",
+            "name": "engines",
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "Impit",
+                  "Camoufox"
+                ]
+              }
+            },
+            "description": "Engines to try, in this order. Unset = default order (Impit, then Camoufox). Escalates to the next engine on failures, status > 299 or a detected JavaScript wall."
+          },
+          {
+            "in": "query",
+            "name": "executeJavaScript",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Unset: default behaviour. true: skips Impit. false: disables JavaScript in Camoufox (and no escalation because of a JavaScript wall)."
+          },
+          {
+            "in": "query",
+            "name": "loadLazyContent",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "If true, Camoufox scrolls to the end of the page to load lazy loading content. Skips Impit."
+          }
+        ]
+      },
+      "post": {
+        "operationId": "fetchContentPost",
+        "summary": "Fetch an url, returns the plain content (POST)",
+        "description": "Fetches the url, first with Impit (browser TLS fingerprint, no JavaScript) and escalates to Camoufox\n(anti-detect Firefox) on failures, status codes > 299 or if the page requires JavaScript.\n\nReturns the plain response content with the content type of the fetched response: text is always UTF-8, binary\ncontent (images, PDFs, ...) is returned as is. Details about the fetched response are in the `X-Fetch-*` headers:\n* `X-Fetch-Engine`, `X-Fetch-Status`, `X-Fetch-Final-Url`\n* `X-Fetch-Header-<name>`: every header of the fetched response (the total size of response headers is limited\n  by many clients / proxies, e.g. to 16 KB)\n* `X-Fetch-Cookie`: every raw `Set-Cookie` value of the fetched response\n\nUse `/fetch/details` to get everything in a JSON body.\n\nLike GET, but the parameters are sent as JSON body and additionally allow `headers` and `cookies` for the target url.",
+        "tags": [
+          "fetch"
+        ],
+        "responses": {
+          "200": {
+            "description": "The plain response content.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters or no applicable engine.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The url points to a local or private address, which is not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "No engine delivered a usable response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "All engines ran into the timeout.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "The url to fetch (http or https)."
+                  },
+                  "timeout": {
+                    "description": "Timeout in seconds. Unset or < 1 = no timeout.",
+                    "type": "number"
+                  },
+                  "fingerprint": {
+                    "type": "string",
+                    "pattern": "^(firefox|chrome)\\d*$",
+                    "description": "Browser fingerprint like `firefox`, `chrome`, `firefox144` or `chrome131`. Defaults to `chrome`. Camoufox always uses Firefox."
+                  },
+                  "followRedirects": {
+                    "default": true,
+                    "description": "Follow redirects. Defaults to true. Ignored by Camoufox (a browser always follows redirects).",
+                    "type": "boolean"
+                  },
+                  "engines": {
+                    "description": "Engines to try, in this order. Unset = default order (Impit, then Camoufox). Escalates to the next engine on failures, status > 299 or a detected JavaScript wall.",
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "Impit",
+                        "Camoufox"
+                      ]
+                    }
+                  },
+                  "executeJavaScript": {
+                    "description": "Unset: default behaviour. true: skips Impit. false: disables JavaScript in Camoufox (and no escalation because of a JavaScript wall).",
+                    "type": "boolean"
+                  },
+                  "loadLazyContent": {
+                    "description": "If true, Camoufox scrolls to the end of the page to load lazy loading content. Skips Impit.",
+                    "type": "boolean"
+                  },
+                  "headers": {
+                    "description": "Headers to send to the url.",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "cookies": {
+                    "description": "Cookies to send to the url (name -> value).",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "url"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fetch/details": {
+      "get": {
+        "operationId": "fetchDetailsGet",
+        "summary": "Fetch an url, returns the details as JSON (GET)",
+        "description": "Fetches the url, first with Impit (browser TLS fingerprint, no JavaScript) and escalates to Camoufox\n(anti-detect Firefox) on failures, status codes > 299 or if the page requires JavaScript.\n\nReturns a JSON wrapper with the content, status code, headers, cookies, elapsed time, final url and the engine that\nfetched the response. Binary content is base64 encoded (see `contentEncoding`).",
+        "tags": [
+          "fetch"
+        ],
+        "responses": {
+          "200": {
+            "description": "The JSON wrapper.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "string",
+                      "description": "The decoded text (HTML gets a <base href> if there was none) or, for binary content, base64."
+                    },
+                    "contentEncoding": {
+                      "type": "string",
+                      "enum": [
+                        "Text",
+                        "Base64"
+                      ],
+                      "description": "`Text` or `Base64` (binary responses like images or PDFs)."
+                    },
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "headers": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Lower-case header names, without set-cookie (see cookies)."
+                    },
+                    "cookies": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "The raw Set-Cookie header values."
+                    },
+                    "cookiesParsed": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "domain": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "expires": {
+                            "type": "string"
+                          },
+                          "maxAge": {
+                            "type": "number"
+                          },
+                          "httpOnly": {
+                            "type": "boolean"
+                          },
+                          "secure": {
+                            "type": "boolean"
+                          },
+                          "sameSite": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "elapsedMs": {
+                      "type": "number",
+                      "description": "Total elapsed time, including failed attempts of previous engines."
+                    },
+                    "finalUrl": {
+                      "type": "string",
+                      "description": "The url after following redirects."
+                    },
+                    "engine": {
+                      "type": "string",
+                      "enum": [
+                        "Impit",
+                        "Camoufox"
+                      ],
+                      "description": "The engine that fetched this response."
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "contentEncoding",
+                    "statusCode",
+                    "headers",
+                    "cookies",
+                    "cookiesParsed",
+                    "elapsedMs",
+                    "finalUrl",
+                    "engine"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters or no applicable engine.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The url points to a local or private address, which is not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "No engine delivered a usable response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "All engines ran into the timeout.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "url",
+            "schema": {
+              "type": "string",
+              "format": "uri"
+            },
+            "required": true,
+            "description": "The url to fetch (http or https)."
+          },
+          {
+            "in": "query",
+            "name": "timeout",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Timeout in seconds. Unset or < 1 = no timeout."
+          },
+          {
+            "in": "query",
+            "name": "fingerprint",
+            "schema": {
+              "type": "string",
+              "pattern": "^(firefox|chrome)\\d*$"
+            },
+            "description": "Browser fingerprint like `firefox`, `chrome`, `firefox144` or `chrome131`. Defaults to `chrome`. Camoufox always uses Firefox."
+          },
+          {
+            "in": "query",
+            "name": "followRedirects",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Follow redirects. Defaults to true. Ignored by Camoufox (a browser always follows redirects)."
+          },
+          {
+            "in": "query",
+            "name": "engines",
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "Impit",
+                  "Camoufox"
+                ]
+              }
+            },
+            "description": "Engines to try, in this order. Unset = default order (Impit, then Camoufox). Escalates to the next engine on failures, status > 299 or a detected JavaScript wall."
+          },
+          {
+            "in": "query",
+            "name": "executeJavaScript",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Unset: default behaviour. true: skips Impit. false: disables JavaScript in Camoufox (and no escalation because of a JavaScript wall)."
+          },
+          {
+            "in": "query",
+            "name": "loadLazyContent",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "If true, Camoufox scrolls to the end of the page to load lazy loading content. Skips Impit."
+          }
+        ]
+      },
+      "post": {
+        "operationId": "fetchDetailsPost",
+        "summary": "Fetch an url, returns the details as JSON (POST)",
+        "description": "Fetches the url, first with Impit (browser TLS fingerprint, no JavaScript) and escalates to Camoufox\n(anti-detect Firefox) on failures, status codes > 299 or if the page requires JavaScript.\n\nReturns a JSON wrapper with the content, status code, headers, cookies, elapsed time, final url and the engine that\nfetched the response. Binary content is base64 encoded (see `contentEncoding`).\n\nLike GET, but the parameters are sent as JSON body and additionally allow `headers` and `cookies` for the target url.",
+        "tags": [
+          "fetch"
+        ],
+        "responses": {
+          "200": {
+            "description": "The JSON wrapper.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "string",
+                      "description": "The decoded text (HTML gets a <base href> if there was none) or, for binary content, base64."
+                    },
+                    "contentEncoding": {
+                      "type": "string",
+                      "enum": [
+                        "Text",
+                        "Base64"
+                      ],
+                      "description": "`Text` or `Base64` (binary responses like images or PDFs)."
+                    },
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "headers": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Lower-case header names, without set-cookie (see cookies)."
+                    },
+                    "cookies": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "The raw Set-Cookie header values."
+                    },
+                    "cookiesParsed": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "domain": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "expires": {
+                            "type": "string"
+                          },
+                          "maxAge": {
+                            "type": "number"
+                          },
+                          "httpOnly": {
+                            "type": "boolean"
+                          },
+                          "secure": {
+                            "type": "boolean"
+                          },
+                          "sameSite": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "elapsedMs": {
+                      "type": "number",
+                      "description": "Total elapsed time, including failed attempts of previous engines."
+                    },
+                    "finalUrl": {
+                      "type": "string",
+                      "description": "The url after following redirects."
+                    },
+                    "engine": {
+                      "type": "string",
+                      "enum": [
+                        "Impit",
+                        "Camoufox"
+                      ],
+                      "description": "The engine that fetched this response."
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "contentEncoding",
+                    "statusCode",
+                    "headers",
+                    "cookies",
+                    "cookiesParsed",
+                    "elapsedMs",
+                    "finalUrl",
+                    "engine"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters or no applicable engine.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The url points to a local or private address, which is not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "No engine delivered a usable response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "All engines ran into the timeout.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "ForbiddenAddress",
+                        "NoApplicableEngine",
+                        "Timeout",
+                        "AllEnginesFailed"
+                      ]
+                    },
+                    "engineFailures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "engine": {
+                            "type": "string",
+                            "enum": [
+                              "Impit",
+                              "Camoufox"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "Timeout",
+                              "Network",
+                              "HttpStatus",
+                              "JsWall",
+                              "BrowserLaunch",
+                              "BrowserClosed",
+                              "Other"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "statusCode": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason",
+                    "engineFailures"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "The url to fetch (http or https)."
+                  },
+                  "timeout": {
+                    "description": "Timeout in seconds. Unset or < 1 = no timeout.",
+                    "type": "number"
+                  },
+                  "fingerprint": {
+                    "type": "string",
+                    "pattern": "^(firefox|chrome)\\d*$",
+                    "description": "Browser fingerprint like `firefox`, `chrome`, `firefox144` or `chrome131`. Defaults to `chrome`. Camoufox always uses Firefox."
+                  },
+                  "followRedirects": {
+                    "default": true,
+                    "description": "Follow redirects. Defaults to true. Ignored by Camoufox (a browser always follows redirects).",
+                    "type": "boolean"
+                  },
+                  "engines": {
+                    "description": "Engines to try, in this order. Unset = default order (Impit, then Camoufox). Escalates to the next engine on failures, status > 299 or a detected JavaScript wall.",
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "Impit",
+                        "Camoufox"
+                      ]
+                    }
+                  },
+                  "executeJavaScript": {
+                    "description": "Unset: default behaviour. true: skips Impit. false: disables JavaScript in Camoufox (and no escalation because of a JavaScript wall).",
+                    "type": "boolean"
+                  },
+                  "loadLazyContent": {
+                    "description": "If true, Camoufox scrolls to the end of the page to load lazy loading content. Skips Impit.",
+                    "type": "boolean"
+                  },
+                  "headers": {
+                    "description": "Headers to send to the url.",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "cookies": {
+                    "description": "Cookies to send to the url (name -> value).",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "url"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

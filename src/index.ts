@@ -24,7 +24,7 @@ const fetchService = new FetchService(
   new UrlGuardService(config.allowLocalAddresses),
 )
 
-const app = new Hono()
+export const app = new Hono()
 
 
 // add metrics. Include this before app.use("*", logger()) so that requests to /metrics are not logged

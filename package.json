@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test test/unit",
     "test:protected": "bun test test/protectedSites.test.ts",
-    "camoufox:fetch": "camoufox-js fetch"
+    "camoufox:fetch": "camoufox-js fetch",
+    "generate:openapi": "bun run scripts/generate-openapi.ts"
   },
   "dependencies": {
     "@hono/prometheus": "^1.0.3",
